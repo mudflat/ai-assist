@@ -1,0 +1,12 @@
+build/
+.vscode/
+sdkconfig
+sdkconfig.old
+sdkconfig.defaults
+kconfig
+kconfig.projbuild
+flash_store.txt
+main.txt
+*.bin
+*.elf
+*.map
