@@ -59,16 +59,17 @@ static void init_i2s_rx()
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
         .slot_cfg = {
-            .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT,
-            .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT,
-            .slot_mode = I2S_SLOT_MODE_STEREO,
-            .slot_mask = I2S_STD_SLOT_LEFT | I2S_STD_SLOT_RIGHT,
-            .ws_width = I2S_SLOT_BIT_WIDTH_16BIT,
+            .data_bit_width = I2S_DATA_BIT_WIDTH_32BIT,
+            .slot_bit_width = I2S_SLOT_BIT_WIDTH_32BIT,
+            .slot_mode = I2S_SLOT_MODE_MONO,
+            .slot_mask = I2S_STD_SLOT_LEFT,
+            .ws_width = I2S_SLOT_BIT_WIDTH_32BIT,
             .ws_pol = false,
             .bit_shift = true,
             .left_align = true,
             .big_endian = false,
         },
+
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
             .bclk = I2S_MIC_SCK_IO,
@@ -95,12 +96,6 @@ static void init_i2s_tx()
 
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        //.clk_cfg = {
-            //.sample_rate_hz = SAMPLE_RATE,
-            //.clk_src = I2S_CLK_SRC_DEFAULT,
-            //.mclk_multiple = I2S_MCLK_MULTIPLE_256,
-            //.bclk_div = 4,  // 16-bit mono @ 16kHz → 256x oversample
-        //},
         .slot_cfg = {
             .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT,
             .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT,
@@ -201,22 +196,15 @@ void app_main(void)
             while (gpio_get_level(BUTTON_GPIO) == 0) {
                 size_t bytes_read = 0;
                 if (i2s_channel_read(rx_handle, buffer, BUFFER_SIZE, &bytes_read, portMAX_DELAY) == ESP_OK) {
-                    //total_written += bytes_read;
+                    int32_t *raw_samples = (int32_t *)buffer;
+                    size_t sample_count = bytes_read / sizeof(int32_t);
 
-                    //int16_t *samples_in = (int16_t *)buffer;
-                    //flash_store_write(samples_in, bytes_read);
-
-
-                    int16_t *stereo_samples = (int16_t *)buffer;
-                    size_t sample_count = bytes_read / sizeof(int16_t);
-
-                    for (size_t i = 0, j = 0; i < sample_count; i += 2, j++) {
-                        converted[j] = stereo_samples[i];  // Only LEFT channel
+                    for (size_t i = 0; i < sample_count; i++) {
+                        int16_t sample16 = (int16_t)(raw_samples[i] >> 14);  // extract top 16 bits from 24-bit MSB
+                        converted[i] = sample16;
                     }
-                    size_t mono_bytes = (sample_count / 2) * sizeof(int16_t);
-                    flash_store_write(converted, mono_bytes);
-                    total_written += mono_bytes;
-                    ESP_LOGI(TAG, "Sample[0]=%d L, Sample[1]=%d R (should be noise)", stereo_samples[0], stereo_samples[1]);
+                    flash_store_write(converted, sample_count * sizeof(int16_t));
+                    total_written += sample_count * sizeof(int16_t);
                 }
             }
 
@@ -241,17 +229,8 @@ void app_main(void)
                 int16_t *samples = (int16_t *)buffer;
                 size_t sample_count = bytes_read / sizeof(int16_t);
 
-                //for (size_t i = 0; i < sample_count; i++) {
-                    //int32_t boosted = samples[i] * 2;
-                    //if (boosted > INT16_MAX) boosted = INT16_MAX;
-                    //if (boosted < INT16_MIN) boosted = INT16_MIN;
-                    //converted[i] = (int16_t)boosted;
-                //}
-
                 size_t bytes_written;
                 i2s_channel_write(tx_handle, samples, sample_count * sizeof(int16_t), &bytes_written, portMAX_DELAY);
-
-                //i2s_channel_write(tx_handle, converted, sample_count * sizeof(int16_t), &bytes_written, portMAX_DELAY);
 
                 ESP_LOGI(TAG, "Playback: read=%d bytes (stereo), mono_samples=%d, written=%d", bytes_read, sample_count, bytes_written);
             }
