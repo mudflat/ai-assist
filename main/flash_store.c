@@ -43,6 +43,7 @@ esp_err_t flash_store_write(const void *data, size_t size)
 {
     if (!s_file) return ESP_FAIL;
     size_t written = fwrite(data, 1, size, s_file);
+    fflush(s_file); // <- Ensure data is written to disk
     return (written == size) ? ESP_OK : ESP_FAIL;
 }
 
@@ -73,8 +74,16 @@ esp_err_t flash_store_reset(void)
 
 esp_err_t flash_store_seek_start(void)
 {
-    if (!s_file) return ESP_FAIL;
-    return (fseek(s_file, 0, SEEK_SET) == 0) ? ESP_OK : ESP_FAIL;
+    if (s_file) {
+        fclose(s_file);
+        s_file = fopen(TEMP_FILE_PATH, "rb");
+        if (!s_file) {
+            ESP_LOGE(FLASH_LOG_TAG, "Failed to reopen file for reading");
+            return ESP_FAIL;
+        }
+        return ESP_OK;
+    }
+    return ESP_FAIL;
 }
 
 //size_t flash_store_size(void)
